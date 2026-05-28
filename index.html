@@ -137,11 +137,18 @@ const CTX=CVS.getContext('2d');
 const BG='#111111';
 const CC={red:'#ff5941',yellow:'#ffd726',blue:'#4488ff',pink:'#E794DA',teal:'#2A9060'};
 const SIG_COLORS=[CC.red,CC.yellow,CC.blue,CC.pink];
+const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+const DOT_SP=isMobile?13:10;
+const DOT_SZ=isMobile?3:2;
+
+// Use visualViewport for reliable iOS Safari dimensions
+function vw(){return(window.visualViewport?window.visualViewport.width:window.innerWidth);}
+function vh(){return(window.visualViewport?window.visualViewport.height:window.innerHeight);}
 
 const LEVELS=[
-  {n:1,name:'AMBIENT',sigs:1,period:4200,catchFrac:0.27,quota:5,secs:35},
-  {n:2,name:'ACTIVE', sigs:2,period:3000,catchFrac:0.22,quota:7,secs:28},
-  {n:3,name:'SIGNAL', sigs:3,period:2200,catchFrac:0.18,quota:9,secs:22},
+  {n:1,name:'AMBIENT',sigs:1,period:4000,catchFrac:0.32,quota:5,secs:40},
+  {n:2,name:'ACTIVE', sigs:2,period:3000,catchFrac:0.25,quota:7,secs:30},
+  {n:3,name:'SIGNAL', sigs:3,period:2200,catchFrac:0.20,quota:9,secs:24},
 ];
 
 const ARTIFACTS=[
@@ -164,7 +171,7 @@ function hexRgb(h){const x=h.replace('#','');return[parseInt(x.slice(0,2),16),pa
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 
-let state={screen:'intro',score:0,lives:3,li:0,tLeft:35,caught:0,collection:[]};
+let state={screen:'intro',score:0,lives:3,li:0,tLeft:40,caught:0,collection:[]};
 let eng={t:0,sigs:[],parts:[]};
 let tmr=null,raf=null;
 
@@ -189,56 +196,86 @@ const sfx={
   up:()=>[330,440,550,660,880].forEach((f,i)=>beep(f,'sine',0.1,0.3,i*0.1)),
 };
 
+const SIG_R=isMobile?72:56;
+const MARGIN=100;
+
 function makeSig(W,H,col){
-  return{col,cx:rnd(90,W-90),cy:rnd(90,H-90),vx:rnd(-0.3,0.3),vy:rnd(-0.3,0.3),r:isMobile?68:56,pulseT:Math.random()*4200,phase:0,catchable:false,flashCol:null};
+  return{
+    col,
+    cx:rnd(MARGIN,W-MARGIN),
+    cy:rnd(MARGIN,H-MARGIN),
+    vx:rnd(-0.25,0.25),vy:rnd(-0.25,0.25),
+    r:SIG_R,
+    pulseT:rnd(0,1000), // start early in cycle so signal appears quickly
+    phase:0,catchable:false,flashCol:null
+  };
 }
+
 function makeParts(x,y,col,n=60){
   return Array.from({length:n},()=>({x,y,vx:rnd(-12,12),vy:rnd(-18,4),sz:rnd(3,9),col,life:1,decay:rnd(0.012,0.026)}));
 }
-
-const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
-const DOT_SP=isMobile?14:10;
-const DOT_SZ=isMobile?2.5:2;
 
 function drawScene(W,H,t,sigs,parts){
   CTX.fillStyle=BG;CTX.fillRect(0,0,W,H);
   const sp=DOT_SP,ds=DOT_SZ;
   const cols=Math.ceil(W/sp),rows=Math.ceil(H/sp);
-  for(let r=0;r<rows;r++){
-    for(let c=0;c<cols;c++){
-      const x=c*sp+sp/2,y=r*sp+sp/2;
+
+  for(let row=0;row<rows;row++){
+    for(let col=0;col<cols;col++){
+      const x=col*sp+sp/2,y=row*sp+sp/2;
       const n=Math.sin(x*0.045+t*0.38)*Math.cos(y*0.032+t*0.27)+Math.sin((x-y)*0.022+t*0.54)*0.5;
-      let bright=(n*0.5+0.5)*0.12+0.02;
-      let dr=160,dg=160,db=172;
+      let bright=(n*0.5+0.5)*0.10+0.03;
+      let dr=155,dg=155,db=168;
+
       for(const s of sigs){
         const dc=s.flashCol||s.col;
         const dx=x-s.cx,dy=y-s.cy,d=Math.sqrt(dx*dx+dy*dy);
-        if(d<s.r*2.8){
-          const prox=1-d/(s.r*2.8),core=Math.max(0,1-d/s.r);
+        const outerR=s.r*3.5;
+        if(d<outerR){
           const[sr,sg,sb]=hexRgb(dc);
-          const blend=prox*s.phase*0.88;
-          dr+=(sr-dr)*blend;dg+=(sg-dg)*blend;db+=(sb-db)*blend;
-          bright+=core*s.phase*0.65;
-          if(s.catchable)bright+=core*(Math.sin(t*13)*0.5+0.5)*0.32;
+          // Always-visible dim locator glow (even at phase 0)
+          const locator=Math.max(0,1-d/outerR)*0.12;
+          dr+=(sr-dr)*locator;dg+=(sg-dg)*locator;db+=(sb-db)*locator;
+          bright+=locator*0.06;
+
+          // Phase-driven glow
+          if(s.phase>0){
+            const prox=Math.max(0,1-d/(s.r*2.2));
+            const core=Math.max(0,1-d/s.r);
+            const blend=prox*s.phase*0.92;
+            dr+=(sr-dr)*blend;dg+=(sg-dg)*blend;db+=(sb-db)*blend;
+            bright+=core*s.phase*0.85;
+            // Extra catchable flare
+            if(s.catchable){
+              bright+=core*(Math.sin(t*14)*0.5+0.5)*0.45;
+              bright+=prox*0.25;
+            }
+          }
         }
       }
+
       bright=clamp(bright,0,1);
-      if(bright<0.02)continue;
+      if(bright<0.025)continue;
       CTX.fillStyle=`rgba(${~~dr},${~~dg},${~~db},${bright.toFixed(3)})`;
       CTX.fillRect(x-ds/2,y-ds/2,ds,ds);
     }
   }
+
+  // Catchable rings
   for(const s of sigs){
-    if(!s.catchable)continue;
+    if(s.phase<0.05)continue;
     const dc=s.flashCol||s.col;
-    const pulse=Math.sin(t*9)*0.5+0.5;
     const[r,g,b]=hexRgb(dc);
-    [1.4,1.0,0.65].forEach((m,i)=>{
-      CTX.strokeStyle=`rgba(${r},${g},${b},${(0.6-i*0.16)*pulse})`;
-      CTX.lineWidth=1.5-i*0.4;
-      CTX.beginPath();CTX.arc(s.cx,s.cy,s.r*m+pulse*5,0,Math.PI*2);CTX.stroke();
+    const pulse=s.catchable?(Math.sin(t*10)*0.5+0.5):s.phase*0.4;
+    const baseAlpha=s.catchable?0.75:0.25*s.phase;
+    [1.5,1.1,0.7].forEach((m,i)=>{
+      CTX.strokeStyle=`rgba(${r},${g},${b},${Math.max(0,baseAlpha-i*0.18)*pulse})`;
+      CTX.lineWidth=s.catchable?2-i*0.4:1;
+      CTX.beginPath();CTX.arc(s.cx,s.cy,s.r*m+(s.catchable?pulse*6:0),0,Math.PI*2);CTX.stroke();
     });
   }
+
+  // Particles
   for(const p of parts){
     const[pr,pg,pb]=hexRgb(p.col);
     CTX.fillStyle=`rgba(${pr},${pg},${pb},${p.life.toFixed(3)})`;
@@ -296,7 +333,7 @@ function updateHud(){
 
 function startLevel(idx){
   const cfg=LEVELS[idx];if(!cfg)return;
-  const W=window.innerWidth,H=window.innerHeight;
+  const W=vw(),H=vh();
   eng={
     t:eng.t,
     sigs:Array.from({length:cfg.sigs},(_,i)=>makeSig(W,H,SIG_COLORS[i%4])),
@@ -310,8 +347,7 @@ function startLevel(idx){
     updateHud();
     if(state.tLeft<=0){
       killTmr();
-      const c=LEVELS[state.li];
-      if(state.caught>=c.quota){
+      if(state.caught>=LEVELS[state.li].quota){
         advanceOrWin();
       } else {
         state.screen='over';showOver();
@@ -378,7 +414,7 @@ function handleTap(cx,cy){
   let hit=false;
   for(const s of e.sigs){
     const dx=cx-s.cx,dy=cy-s.cy,dist=Math.sqrt(dx*dx+dy*dy);
-    const hitR=isMobile?s.r*2.4:s.r*1.6;
+    const hitR=isMobile?s.r*2.6:s.r*1.8;
     if(dist<hitR){
       hit=true;
       if(s.catchable){
@@ -389,7 +425,8 @@ function handleTap(cx,cy){
         state.collection.push({...art,pts});
         state.score+=pts;
         s.pulseT=0;s.catchable=false;s.phase=0;
-        s.cx=rnd(90,window.innerWidth-90);s.cy=rnd(90,window.innerHeight-90);
+        const W2=vw(),H2=vh();
+        s.cx=rnd(MARGIN,W2-MARGIN);s.cy=rnd(MARGIN,H2-MARGIN);
         state.caught++;
         const cfg=LEVELS[state.li];
         showCatch(art,pts,()=>{
@@ -398,7 +435,7 @@ function handleTap(cx,cy){
         });
       } else {
         sfx.miss();
-        const orig=s.col;s.flashCol='#ff2222';
+        s.flashCol='#ff2222';
         setTimeout(()=>{s.flashCol=null;},450);
         state.lives=Math.max(0,state.lives-1);
         updateHud();
@@ -430,31 +467,47 @@ function showCatch(art,pts,cb){
 
 function resize(){
   const dpr=Math.min(window.devicePixelRatio||1,2);
-  CVS.width=window.innerWidth*dpr;CVS.height=window.innerHeight*dpr;
+  const W=vw(),H=vh();
+  CVS.width=W*dpr;CVS.height=H*dpr;
+  CVS.style.width=W+'px';CVS.style.height=H+'px';
+  // Clamp existing signals into new bounds
+  for(const s of eng.sigs){
+    s.cx=clamp(s.cx,MARGIN,W-MARGIN);
+    s.cy=clamp(s.cy,MARGIN,H-MARGIN);
+  }
 }
-resize();window.addEventListener('resize',()=>{resize();});
+
+resize();
+window.addEventListener('resize',resize);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',resize);
+  window.visualViewport.addEventListener('scroll',resize);
+}
 
 let prev=performance.now();
 function loop(now){
   raf=requestAnimationFrame(loop);
   const dt=Math.min((now-prev)/1000,0.05);prev=now;
   eng.t+=dt;
-  const W=window.innerWidth,H=window.innerHeight;
+  const W=vw(),H=vh();
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const cfg=LEVELS[state.li]||LEVELS[0];
   const scr=state.screen;
+
   if(scr==='playing'||scr==='caught'){
     for(const s of eng.sigs){
       s.cx+=s.vx;s.cy+=s.vy;
-      if(s.cx<80||s.cx>W-80)s.vx*=-1;
-      if(s.cy<80||s.cy>H-80)s.vy*=-1;
-      s.cx=clamp(s.cx,80,W-80);s.cy=clamp(s.cy,80,H-80);
-      s.vx+=rnd(-0.022,0.022);s.vy+=rnd(-0.022,0.022);
-      s.vx=clamp(s.vx,-0.6,0.6);s.vy=clamp(s.vy,-0.6,0.6);
-      s.pulseT+=dt*1000;if(s.pulseT>cfg.period)s.pulseT=0;
+      if(s.cx<MARGIN||s.cx>W-MARGIN)s.vx*=-1;
+      if(s.cy<MARGIN||s.cy>H-MARGIN)s.vy*=-1;
+      s.cx=clamp(s.cx,MARGIN,W-MARGIN);
+      s.cy=clamp(s.cy,MARGIN,H-MARGIN);
+      s.vx+=rnd(-0.018,0.018);s.vy+=rnd(-0.018,0.018);
+      s.vx=clamp(s.vx,-0.5,0.5);s.vy=clamp(s.vy,-0.5,0.5);
+      s.pulseT+=dt*1000;
+      if(s.pulseT>cfg.period)s.pulseT=0;
       const prev_c=s.catchable;
       const p=s.pulseT/cfg.period;
-      const ramp=0.3,hold=cfg.catchFrac,down=0.25;
+      const ramp=0.28,hold=cfg.catchFrac,down=0.22;
       if(p<ramp){s.phase=p/ramp;s.catchable=false;}
       else if(p<ramp+hold){s.phase=1;s.catchable=true;}
       else if(p<ramp+hold+down){s.phase=1-(p-ramp-hold)/down;s.catchable=false;}
@@ -462,6 +515,7 @@ function loop(now){
       if(!prev_c&&s.catchable)sfx.ping();
     }
   }
+
   eng.parts=eng.parts.filter(p=>p.life>0.01);
   for(const p of eng.parts){p.x+=p.vx;p.y+=p.vy;p.vy+=0.3;p.vx*=0.97;p.life-=p.decay;}
   CTX.setTransform(dpr,0,0,dpr,0,0);
