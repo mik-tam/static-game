@@ -63,9 +63,10 @@ canvas{position:fixed;inset:0;display:block;touch-action:none}
         <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px">CAUGHT</div>
         <div id="hud-caught" class="vt" style="color:#4488ff;font-size:24px;line-height:1">0<span style="color:#1a1a1a">/5</span></div>
       </div>
-      <div style="text-align:right">
+      <div style="text-align:right;position:relative">
         <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px">TIME</div>
         <div id="hud-time" class="vt" style="color:#ffd726;font-size:32px;line-height:1">35</div>
+        <div id="hud-timebonus" class="vt hidden" style="position:absolute;top:-18px;right:0;color:#ffd726;font-size:16px;letter-spacing:2px;pointer-events:none"></div>
       </div>
     </div>
   </div>
@@ -128,6 +129,22 @@ canvas{position:fixed;inset:0;display:block;touch-action:none}
   <div class="vt" style="font-size:24px;color:#E794DA;letter-spacing:4px">YOUR COLLECTION</div>
   <div id="col-grid" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:360px"></div>
   <button class="btn btn-dim" id="btn-colback" style="margin-top:8px">&#8592; BACK</button>
+</div>
+
+<!-- CARD DETAIL LIGHTBOX -->
+<div id="scr-detail" class="hidden" style="position:fixed;inset:0;background:rgba(17,17,17,0.97);z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none">
+  <div id="detail-dots" style="display:flex;gap:8px;position:absolute;top:max(28px,var(--sat));left:50%;transform:translateX(-50%)"></div>
+  <div id="detail-card" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:0 72px;user-select:none">
+    <div id="detail-art"></div>
+    <div id="detail-name" class="vt" style="font-size:clamp(52px,18vw,96px);letter-spacing:10px;line-height:1"></div>
+    <div id="detail-quote" class="mono" style="font-size:clamp(12px,3.5vw,15px);color:#555;max-width:280px;text-align:center;line-height:2;padding:0 8px"></div>
+    <div id="detail-pts" class="vt" style="font-size:20px;letter-spacing:4px;color:#2a2a2a"></div>
+  </div>
+  <button id="detail-prev" style="position:absolute;left:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:#2a2a2a;font-size:56px;cursor:pointer;padding:16px;font-family:'VT323',monospace;line-height:1">&#8249;</button>
+  <button id="detail-next" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:#2a2a2a;font-size:56px;cursor:pointer;padding:16px;font-family:'VT323',monospace;line-height:1">&#8250;</button>
+  <div style="position:absolute;bottom:max(28px,var(--sab));display:flex;gap:16px">
+    <button class="btn btn-dim" id="btn-detail-seeall">SEE ALL</button>
+  </div>
 </div>
 
 <script>
@@ -305,6 +322,7 @@ function buildPixelArt(id,col,acc,px){
 function killTmr(){if(tmr){clearInterval(tmr);tmr=null;}}
 
 function show(id){
+  document.getElementById('scr-detail').classList.add('hidden');
   ['scr-intro','scr-caught','scr-lvlup','scr-over','scr-win','scr-collection'].forEach(s=>{
     const el=document.getElementById(s);
     if(s===id)el.classList.remove('hidden');else el.classList.add('hidden');
@@ -396,9 +414,12 @@ function buildWinCol(){
 
 function buildColGrid(){
   const el=document.getElementById('col-grid');el.innerHTML='';
-  state.collection.forEach(a=>{
+  state.collection.forEach((a,i)=>{
     const card=document.createElement('div');
-    card.style.cssText='display:flex;flex-direction:column;align-items:center;gap:8px;background:#161616;padding:12px;border:1px solid #222';
+    card.style.cssText='display:flex;flex-direction:column;align-items:center;gap:8px;background:#161616;padding:12px;border:1px solid #222;cursor:pointer;transition:border-color 0.15s';
+    card.addEventListener('touchstart',()=>{card.style.borderColor=a.col;},{passive:true});
+    card.addEventListener('touchend',()=>{card.style.borderColor='#222';openDetail(i);},{passive:true});
+    card.addEventListener('click',()=>openDetail(i));
     card.appendChild(buildPixelArt(a.id,a.col,a.acc,18));
     const nm=document.createElement('div');nm.className='vt';nm.style.cssText=`color:${a.col};font-size:15px;letter-spacing:2px`;nm.textContent=a.id;
     const qt=document.createElement('div');qt.className='mono';qt.style.cssText='color:#333;font-size:10px;max-width:120px;text-align:center;line-height:1.8';qt.textContent=`"${a.q}"`;
@@ -407,6 +428,81 @@ function buildColGrid(){
     el.appendChild(card);
   });
 }
+
+// ---- Detail / lightbox ----
+let detailIdx=0;
+let swipeX0=null;
+
+function openDetail(idx){
+  detailIdx=idx;
+  renderDetail(0);
+  document.getElementById('scr-detail').classList.remove('hidden');
+}
+
+function closeDetail(){
+  document.getElementById('scr-detail').classList.add('hidden');
+}
+
+function renderDetail(dir){
+  const a=state.collection[detailIdx];
+  if(!a)return;
+  const card=document.getElementById('detail-card');
+  // animate out
+  card.style.opacity='0';
+  card.style.transform=dir===0?'none':`translateX(${dir>0?'-40px':'40px'})`;
+  setTimeout(()=>{
+    // populate
+    const artEl=document.getElementById('detail-art');artEl.innerHTML='';
+    const px=isMobile?36:44;
+    artEl.appendChild(buildPixelArt(a.id,a.col,a.acc,px));
+    const nm=document.getElementById('detail-name');
+    nm.textContent=a.id;nm.style.color=a.col;
+    nm.style.textShadow=`0 0 40px ${a.col}88`;
+    document.getElementById('detail-quote').textContent=`"${a.q}"`;
+    document.getElementById('detail-pts').textContent='+'+a.pts;
+    // dots
+    const dots=document.getElementById('detail-dots');dots.innerHTML='';
+    state.collection.forEach((_,i)=>{
+      const d=document.createElement('div');
+      d.style.cssText=`width:${i===detailIdx?20:6}px;height:6px;background:${i===detailIdx?a.col:'#2a2a2a'};transition:all 0.2s;border-radius:3px`;
+      dots.appendChild(d);
+    });
+    // arrows visibility
+    document.getElementById('detail-prev').style.color=detailIdx>0?'#555':'#1e1e1e';
+    document.getElementById('detail-next').style.color=detailIdx<state.collection.length-1?'#555':'#1e1e1e';
+    // animate in
+    card.style.transform=dir===0?'none':`translateX(${dir>0?'40px':'-40px'})`;
+    requestAnimationFrame(()=>{
+      card.style.transition='opacity 0.18s,transform 0.18s';
+      card.style.opacity='1';
+      card.style.transform='none';
+    });
+  },120);
+}
+
+function detailStep(dir){
+  const next=detailIdx+dir;
+  if(next<0||next>=state.collection.length)return;
+  detailIdx=next;
+  renderDetail(dir);
+}
+
+// swipe support on detail screen
+const detailEl=document.getElementById('scr-detail');
+detailEl.addEventListener('touchstart',e=>{
+  if(e.target.closest('button'))return;
+  swipeX0=e.touches[0].clientX;
+},{passive:true});
+detailEl.addEventListener('touchend',e=>{
+  if(swipeX0===null)return;
+  const dx=e.changedTouches[0].clientX-swipeX0;
+  swipeX0=null;
+  if(Math.abs(dx)>40)detailStep(dx<0?1:-1);
+},{passive:true});
+
+document.getElementById('detail-prev').addEventListener('click',()=>detailStep(-1));
+document.getElementById('detail-next').addEventListener('click',()=>detailStep(1));
+document.getElementById('btn-detail-seeall').addEventListener('click',()=>closeDetail());
 
 function handleTap(cx,cy){
   if(state.screen!=='playing')return;
@@ -424,6 +520,11 @@ function handleTap(cx,cy){
         const pts=~~(80+(state.tLeft/LEVELS[state.li].secs)*120);
         state.collection.push({...art,pts});
         state.score+=pts;
+        // Time bonus per catch — finding signal buys more opportunity
+        const timeBonus=isMobile?5:4;
+        state.tLeft=Math.min(state.tLeft+timeBonus,LEVELS[state.li].secs);
+        updateHud();
+        flashTimeBonus('+'+timeBonus+'S');
         s.pulseT=0;s.catchable=false;s.phase=0;
         const W2=vw(),H2=vh();
         s.cx=rnd(MARGIN,W2-MARGIN);s.cy=rnd(MARGIN,H2-MARGIN);
@@ -447,6 +548,22 @@ function handleTap(cx,cy){
   if(!hit){
     e.parts.push(...makeParts(cx,cy,'#ffffff',10).map(p=>({...p,vx:rnd(-4,4),vy:rnd(-4,4),sz:rnd(1,3),decay:p.decay*5})));
   }
+}
+
+function flashTimeBonus(txt){
+  const el=document.getElementById('hud-timebonus');
+  if(!el)return;
+  el.textContent=txt;
+  el.classList.remove('hidden');
+  el.style.opacity='1';
+  el.style.transform='translateY(0)';
+  el.style.transition='none';
+  requestAnimationFrame(()=>{
+    el.style.transition='opacity 0.8s ease-out, transform 0.8s ease-out';
+    el.style.opacity='0';
+    el.style.transform='translateY(-14px)';
+  });
+  setTimeout(()=>el.classList.add('hidden'),850);
 }
 
 function showCatch(art,pts,cb){
