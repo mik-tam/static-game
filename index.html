@@ -190,18 +190,23 @@ const sfx={
 };
 
 function makeSig(W,H,col){
-  return{col,cx:rnd(90,W-90),cy:rnd(90,H-90),vx:rnd(-0.3,0.3),vy:rnd(-0.3,0.3),r:56,pulseT:Math.random()*4200,phase:0,catchable:false,flashCol:null};
+  return{col,cx:rnd(90,W-90),cy:rnd(90,H-90),vx:rnd(-0.3,0.3),vy:rnd(-0.3,0.3),r:isMobile?68:56,pulseT:Math.random()*4200,phase:0,catchable:false,flashCol:null};
 }
 function makeParts(x,y,col,n=60){
   return Array.from({length:n},()=>({x,y,vx:rnd(-12,12),vy:rnd(-18,4),sz:rnd(3,9),col,life:1,decay:rnd(0.012,0.026)}));
 }
 
+const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+const DOT_SP=isMobile?14:10;
+const DOT_SZ=isMobile?2.5:2;
+
 function drawScene(W,H,t,sigs,parts){
   CTX.fillStyle=BG;CTX.fillRect(0,0,W,H);
-  const sp=10;
-  for(let row=0;row*sp<H;row++){
-    for(let col=0;col*sp<W;col++){
-      const x=col*sp+sp/2,y=row*sp+sp/2;
+  const sp=DOT_SP,ds=DOT_SZ;
+  const cols=Math.ceil(W/sp),rows=Math.ceil(H/sp);
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x=c*sp+sp/2,y=r*sp+sp/2;
       const n=Math.sin(x*0.045+t*0.38)*Math.cos(y*0.032+t*0.27)+Math.sin((x-y)*0.022+t*0.54)*0.5;
       let bright=(n*0.5+0.5)*0.12+0.02;
       let dr=160,dg=160,db=172;
@@ -220,7 +225,7 @@ function drawScene(W,H,t,sigs,parts){
       bright=clamp(bright,0,1);
       if(bright<0.02)continue;
       CTX.fillStyle=`rgba(${~~dr},${~~dg},${~~db},${bright.toFixed(3)})`;
-      CTX.beginPath();CTX.arc(x,y,1.5,0,Math.PI*2);CTX.fill();
+      CTX.fillRect(x-ds/2,y-ds/2,ds,ds);
     }
   }
   for(const s of sigs){
@@ -373,7 +378,8 @@ function handleTap(cx,cy){
   let hit=false;
   for(const s of e.sigs){
     const dx=cx-s.cx,dy=cy-s.cy,dist=Math.sqrt(dx*dx+dy*dy);
-    if(dist<s.r*1.6){
+    const hitR=isMobile?s.r*2.4:s.r*1.6;
+    if(dist<hitR){
       hit=true;
       if(s.catchable){
         sfx.catch();
