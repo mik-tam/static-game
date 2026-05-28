@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>STATIC — Find Your Signal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#111}
+:root{
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+canvas{position:fixed;inset:0;display:block;touch-action:none}
+#ui{position:fixed;inset:0;pointer-events:none;z-index:5}
+.overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(17,17,17,0.92);z-index:10;gap:14px;pointer-events:all}
+.hidden{display:none!important}
+.vt{font-family:'VT323',monospace}
+.mono{font-family:'Share Tech Mono',monospace}
+.btn{background:transparent;border:2px solid #ffd726;color:#ffd726;font-family:'VT323',monospace;font-size:clamp(20px,5vw,28px);padding:14px 40px;cursor:pointer;letter-spacing:4px;box-shadow:0 0 24px #ffd72644;outline:none;transition:all 0.15s}
+.btn:hover{background:#ffd72618;box-shadow:0 0 40px #ffd72666}
+.btn-pink{border-color:#E794DA;color:#E794DA;box-shadow:0 0 24px #E794DA44}
+.btn-pink:hover{background:#E794DA18}
+.btn-dim{border-color:#2a2a2a;color:#444;box-shadow:none}
+.btn-dim:hover{background:#1a1a1a;color:#666}
+@keyframes flicker{0%,88%,96%,100%{opacity:1}91%,94%{opacity:0.72}}
+@keyframes glow{0%,100%{text-shadow:0 0 50px #ffd726,0 0 100px #ffd72633}50%{text-shadow:0 0 80px #ffd726,0 0 160px #ffd72666}}
+@keyframes slideup{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+.title-anim{animation:flicker 5s step-start infinite,glow 3s ease-in-out infinite}
+.reveal-anim{animation:slideup 0.28s ease-out forwards}
+.pulse-anim{animation:pulse 1.8s ease-in-out infinite}
+</style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+
+<div id="ui">
+  <div id="hud" class="hidden" style="position:fixed;inset:0;pointer-events:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:max(20px,var(--sat)) max(24px,var(--sar)) 20px max(24px,var(--sal))">
+      <div>
+        <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px">SCORE</div>
+        <div id="hud-score" class="vt" style="color:#ffd726;font-size:30px;line-height:1;text-shadow:0 0 14px #ffd72688">0</div>
+      </div>
+      <div style="text-align:center">
+        <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px">LEVEL</div>
+        <div id="hud-level" class="vt" style="color:#E794DA;font-size:20px;letter-spacing:5px">AMBIENT</div>
+      </div>
+      <div style="text-align:right">
+        <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px;margin-bottom:6px">FOCUS</div>
+        <div id="hud-lives" style="display:flex;gap:7px;justify-content:flex-end"></div>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:20px max(24px,var(--sar)) max(20px,var(--sab)) max(24px,var(--sal))">
+      <div>
+        <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px">CAUGHT</div>
+        <div id="hud-caught" class="vt" style="color:#4488ff;font-size:24px;line-height:1">0<span style="color:#1a1a1a">/5</span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="vt" style="color:#2a2a2a;font-size:12px;letter-spacing:4px">TIME</div>
+        <div id="hud-time" class="vt" style="color:#ffd726;font-size:32px;line-height:1">35</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INTRO -->
+<div id="scr-intro" class="overlay">
+  <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden;opacity:0.03">
+    <div style="width:100%;height:100%;background:repeating-linear-gradient(0deg,#fff 0px,#fff 1px,transparent 1px,transparent 4px)"></div>
+  </div>
+  <div class="title-anim vt" style="font-size:clamp(80px,24vw,140px);color:#ffd726;letter-spacing:12px;line-height:1">STATIC</div>
+  <div class="vt" style="font-size:clamp(14px,4vw,22px);color:#3a3a3a;text-align:center;letter-spacing:4px;line-height:2.2">THE NOISE IS INFINITE<br>FIND YOUR SIGNAL</div>
+  <div style="width:48px;height:1px;background:#1e1e1e;margin:4px 0"></div>
+  <div class="mono" style="font-size:clamp(10px,2.8vw,12px);color:#2a2a2a;text-align:center;max-width:280px;line-height:2.4;letter-spacing:1px">A SIGNAL PULSES IN THE NOISE<br>TAP AT PEAK BRIGHTNESS TO CATCH<br><span style="color:#ff5941">WRONG TIMING = LOST FOCUS</span></div>
+  <div style="height:8px"></div>
+  <button class="btn" id="btn-start">&#9654; START</button>
+  <div style="height:4px"></div>
+  <div class="vt pulse-anim" style="font-size:12px;color:#1e1e1e;letter-spacing:3px">BEYOND EXPO 2026 &middot; GAMES FOR CHANGE HK</div>
+</div>
+
+<!-- CATCH REVEAL -->
+<div id="scr-caught" class="overlay hidden" style="background:rgba(17,17,17,0.8)">
+  <div class="vt" style="font-size:12px;color:#2a2a2a;letter-spacing:6px;margin-bottom:4px">SIGNAL CAUGHT</div>
+  <div id="catch-art" class="reveal-anim"></div>
+  <div id="catch-name" class="vt reveal-anim" style="font-size:clamp(40px,14vw,76px);letter-spacing:8px;line-height:1.1;margin-top:8px"></div>
+  <div id="catch-quote" class="mono reveal-anim" style="font-size:clamp(11px,3vw,13px);color:#555;max-width:260px;text-align:center;line-height:2;padding:0 20px;margin-top:4px"></div>
+  <div id="catch-pts" class="vt reveal-anim" style="font-size:24px;letter-spacing:4px;margin-top:8px"></div>
+</div>
+
+<!-- LEVEL UP -->
+<div id="scr-lvlup" class="overlay hidden">
+  <div class="vt" style="font-size:13px;color:#2a2a2a;letter-spacing:6px">QUOTA MET</div>
+  <div id="lvlup-n" class="vt" style="font-size:clamp(50px,18vw,100px);color:#ffd726;letter-spacing:4px;text-shadow:0 0 40px #ffd726"></div>
+  <div id="lvlup-name" class="vt" style="font-size:clamp(22px,7vw,36px);color:#E794DA;letter-spacing:6px"></div>
+  <div id="lvlup-sub" class="mono" style="color:#2a2a2a;font-size:12px;margin-top:6px;letter-spacing:2px"></div>
+</div>
+
+<!-- GAME OVER -->
+<div id="scr-over" class="overlay hidden">
+  <div class="vt" style="font-size:13px;color:#2a2a2a;letter-spacing:6px">FOCUS LOST</div>
+  <div class="vt" style="font-size:clamp(40px,14vw,80px);color:#ff5941;letter-spacing:2px;text-shadow:0 0 40px #ff594133">SIGNAL LOST</div>
+  <div id="over-score" class="vt" style="color:#333;font-size:18px;letter-spacing:3px;margin-top:4px"></div>
+  <div id="over-msg" class="mono" style="color:#242424;font-size:clamp(11px,3vw,13px);max-width:260px;text-align:center;line-height:2.2;margin-top:4px"></div>
+  <div style="height:10px"></div>
+  <button class="btn" id="btn-retry">TRY AGAIN</button>
+  <button class="btn btn-pink hidden" id="btn-viewcol" style="margin-top:4px">VIEW COLLECTION</button>
+</div>
+
+<!-- WIN -->
+<div id="scr-win" class="overlay hidden" style="padding:40px 20px;gap:14px">
+  <div class="vt" style="font-size:13px;color:#2a2a2a;letter-spacing:6px">ALL SIGNALS ACQUIRED</div>
+  <div class="vt" style="font-size:clamp(46px,15vw,90px);color:#ffd726;letter-spacing:6px;text-shadow:0 0 50px #ffd726">TUNED IN</div>
+  <div id="win-score" class="vt" style="color:#E794DA;font-size:22px;letter-spacing:4px"></div>
+  <div id="win-col" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:340px;margin:6px 0"></div>
+  <button class="btn" id="btn-winretry">PLAY AGAIN</button>
+</div>
+
+<!-- COLLECTION -->
+<div id="scr-collection" class="overlay hidden" style="overflow-y:auto;padding:40px 20px;gap:16px">
+  <div class="vt" style="font-size:24px;color:#E794DA;letter-spacing:4px">YOUR COLLECTION</div>
+  <div id="col-grid" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:360px"></div>
+  <button class="btn btn-dim" id="btn-colback" style="margin-top:8px">&#8592; BACK</button>
+</div>
+
+<script>
+(function(){
+const CVS=document.getElementById('cvs');
+const CTX=CVS.getContext('2d');
+const BG='#111111';
+const CC={red:'#ff5941',yellow:'#ffd726',blue:'#4488ff',pink:'#E794DA',teal:'#2A9060'};
+const SIG_COLORS=[CC.red,CC.yellow,CC.blue,CC.pink];
+
+const LEVELS=[
+  {n:1,name:'AMBIENT',sigs:1,period:4200,catchFrac:0.27,quota:5,secs:35},
+  {n:2,name:'ACTIVE', sigs:2,period:3000,catchFrac:0.22,quota:7,secs:28},
+  {n:3,name:'SIGNAL', sigs:3,period:2200,catchFrac:0.18,quota:9,secs:22},
+];
+
+const ARTIFACTS=[
+  {id:'SPARK',  col:CC.yellow,acc:CC.red,   q:'You sensed it before you could name it.'},
+  {id:'VISION', col:CC.red,   acc:CC.yellow,q:'The machine generates. You decide what matters.'},
+  {id:'SIGNAL', col:CC.blue,  acc:CC.pink,  q:'Taste is the algorithm that cannot be trained away.'},
+  {id:'PATTERN',col:CC.pink,  acc:CC.blue,  q:'You found meaning where others saw chaos.'},
+  {id:'FLOW',   col:CC.yellow,acc:CC.teal,  q:'Attention is the rarest creative resource.'},
+];
+
+const PA={
+  SPARK:  [[0,0,0,1,1,0,0,0],[0,0,1,2,2,1,0,0],[0,1,2,2,2,2,1,0],[1,2,2,1,1,2,2,1],[1,2,2,1,1,2,2,1],[0,1,2,2,2,2,1,0],[0,0,1,2,2,1,0,0],[0,0,0,1,1,0,0,0]],
+  VISION: [[0,0,1,1,1,1,0,0],[0,1,2,2,2,2,1,0],[1,2,0,1,1,0,2,1],[1,0,1,2,2,1,0,1],[1,0,1,2,2,1,0,1],[1,2,0,1,1,0,2,1],[0,1,2,2,2,2,1,0],[0,0,1,1,1,1,0,0]],
+  SIGNAL: [[0,1,1,0,0,1,1,0],[1,2,0,1,1,0,2,1],[1,0,1,2,2,1,0,1],[0,1,2,2,2,2,1,0],[0,1,2,2,2,2,1,0],[1,0,1,2,2,1,0,1],[1,2,0,1,1,0,2,1],[0,1,1,0,0,1,1,0]],
+  PATTERN:[[1,0,2,0,0,2,0,1],[0,2,0,1,1,0,2,0],[2,0,1,0,0,1,0,2],[0,1,0,2,2,0,1,0],[0,1,0,2,2,0,1,0],[2,0,1,0,0,1,0,2],[0,2,0,1,1,0,2,0],[1,0,2,0,0,2,0,1]],
+  FLOW:   [[0,0,0,0,1,2,0,0],[0,0,0,1,2,2,1,0],[0,0,1,2,2,1,0,0],[0,1,2,2,1,0,0,0],[0,0,1,1,2,1,0,0],[0,0,0,0,1,2,1,0],[0,0,0,0,0,1,2,0],[0,0,0,0,0,0,1,0]],
+};
+
+function hexRgb(h){const x=h.replace('#','');return[parseInt(x.slice(0,2),16),parseInt(x.slice(2,4),16),parseInt(x.slice(4,6),16)];}
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+
+let state={screen:'intro',score:0,lives:3,li:0,tLeft:35,caught:0,collection:[]};
+let eng={t:0,sigs:[],parts:[]};
+let tmr=null,raf=null;
+
+let _ac=null;
+function getAc(){if(!_ac)try{_ac=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}return _ac;}
+function beep(f,t,v,dur,d=0){
+  const ac=getAc();if(!ac)return;
+  try{
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.type=t;o.frequency.value=f;
+    g.gain.setValueAtTime(0,ac.currentTime+d);
+    g.gain.linearRampToValueAtTime(v,ac.currentTime+d+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+d+dur);
+    o.connect(g);g.connect(ac.destination);
+    o.start(ac.currentTime+d);o.stop(ac.currentTime+d+dur);
+  }catch(e){}
+}
+const sfx={
+  ping:()=>beep(1200,'sine',0.07,0.28),
+  catch:()=>[440,554,659,880].forEach((f,i)=>beep(f,'square',0.1,0.2,i*0.07)),
+  miss:()=>{beep(300,'sawtooth',0.08,0.14);beep(180,'sawtooth',0.06,0.15,0.11);},
+  up:()=>[330,440,550,660,880].forEach((f,i)=>beep(f,'sine',0.1,0.3,i*0.1)),
+};
+
+function makeSig(W,H,col){
+  return{col,cx:rnd(90,W-90),cy:rnd(90,H-90),vx:rnd(-0.3,0.3),vy:rnd(-0.3,0.3),r:56,pulseT:Math.random()*4200,phase:0,catchable:false,flashCol:null};
+}
+function makeParts(x,y,col,n=60){
+  return Array.from({length:n},()=>({x,y,vx:rnd(-12,12),vy:rnd(-18,4),sz:rnd(3,9),col,life:1,decay:rnd(0.012,0.026)}));
+}
+
+function drawScene(W,H,t,sigs,parts){
+  CTX.fillStyle=BG;CTX.fillRect(0,0,W,H);
+  const sp=10;
+  for(let row=0;row*sp<H;row++){
+    for(let col=0;col*sp<W;col++){
+      const x=col*sp+sp/2,y=row*sp+sp/2;
+      const n=Math.sin(x*0.045+t*0.38)*Math.cos(y*0.032+t*0.27)+Math.sin((x-y)*0.022+t*0.54)*0.5;
+      let bright=(n*0.5+0.5)*0.12+0.02;
+      let dr=160,dg=160,db=172;
+      for(const s of sigs){
+        const dc=s.flashCol||s.col;
+        const dx=x-s.cx,dy=y-s.cy,d=Math.sqrt(dx*dx+dy*dy);
+        if(d<s.r*2.8){
+          const prox=1-d/(s.r*2.8),core=Math.max(0,1-d/s.r);
+          const[sr,sg,sb]=hexRgb(dc);
+          const blend=prox*s.phase*0.88;
+          dr+=(sr-dr)*blend;dg+=(sg-dg)*blend;db+=(sb-db)*blend;
+          bright+=core*s.phase*0.65;
+          if(s.catchable)bright+=core*(Math.sin(t*13)*0.5+0.5)*0.32;
+        }
+      }
+      bright=clamp(bright,0,1);
+      if(bright<0.02)continue;
+      CTX.fillStyle=`rgba(${~~dr},${~~dg},${~~db},${bright.toFixed(3)})`;
+      CTX.beginPath();CTX.arc(x,y,1.5,0,Math.PI*2);CTX.fill();
+    }
+  }
+  for(const s of sigs){
+    if(!s.catchable)continue;
+    const dc=s.flashCol||s.col;
+    const pulse=Math.sin(t*9)*0.5+0.5;
+    const[r,g,b]=hexRgb(dc);
+    [1.4,1.0,0.65].forEach((m,i)=>{
+      CTX.strokeStyle=`rgba(${r},${g},${b},${(0.6-i*0.16)*pulse})`;
+      CTX.lineWidth=1.5-i*0.4;
+      CTX.beginPath();CTX.arc(s.cx,s.cy,s.r*m+pulse*5,0,Math.PI*2);CTX.stroke();
+    });
+  }
+  for(const p of parts){
+    const[pr,pg,pb]=hexRgb(p.col);
+    CTX.fillStyle=`rgba(${pr},${pg},${pb},${p.life.toFixed(3)})`;
+    CTX.fillRect(~~(p.x-p.sz/2),~~(p.y-p.sz/2),~~p.sz,~~p.sz);
+  }
+}
+
+function buildPixelArt(id,col,acc,px){
+  const g=PA[id]||PA.SPARK;
+  const wrap=document.createElement('div');
+  g.forEach(row=>{
+    const rd=document.createElement('div');rd.style.display='flex';
+    row.forEach(v=>{
+      const cell=document.createElement('div');
+      cell.style.width=px+'px';cell.style.height=px+'px';
+      if(v>0){
+        cell.style.background=v===1?col:acc;
+        cell.style.boxShadow=`0 0 ${~~(px/2)}px ${v===1?col:acc}66`;
+      }
+      rd.appendChild(cell);
+    });
+    wrap.appendChild(rd);
+  });
+  return wrap;
+}
+
+function killTmr(){if(tmr){clearInterval(tmr);tmr=null;}}
+
+function show(id){
+  ['scr-intro','scr-caught','scr-lvlup','scr-over','scr-win','scr-collection'].forEach(s=>{
+    const el=document.getElementById(s);
+    if(s===id)el.classList.remove('hidden');else el.classList.add('hidden');
+  });
+  const hud=document.getElementById('hud');
+  if(id===null)hud.classList.remove('hidden');else hud.classList.add('hidden');
+}
+
+function updateHud(){
+  const cfg=LEVELS[state.li];
+  document.getElementById('hud-score').textContent=state.score;
+  document.getElementById('hud-level').textContent=cfg.name;
+  document.getElementById('hud-caught').innerHTML=`<span style="color:#ccc">${state.caught}</span><span style="color:#1a1a1a">/${cfg.quota}</span>`;
+  const tEl=document.getElementById('hud-time');
+  tEl.textContent=state.tLeft;
+  tEl.style.color=state.tLeft<=8?CC.red:CC.yellow;
+  tEl.style.textShadow=state.tLeft<=8?`0 0 20px ${CC.red}`:'0 0 12px #ffd72655';
+  const livEl=document.getElementById('hud-lives');
+  livEl.innerHTML='';
+  for(let i=0;i<3;i++){
+    const d=document.createElement('div');
+    d.style.cssText=`width:12px;height:12px;background:${i<state.lives?CC.red:'#1e1e1e'};${i<state.lives?`box-shadow:0 0 8px ${CC.red}`:''};transition:background 0.3s`;
+    livEl.appendChild(d);
+  }
+}
+
+function startLevel(idx){
+  const cfg=LEVELS[idx];if(!cfg)return;
+  const W=window.innerWidth,H=window.innerHeight;
+  eng={
+    t:eng.t,
+    sigs:Array.from({length:cfg.sigs},(_,i)=>makeSig(W,H,SIG_COLORS[i%4])),
+    parts:[],
+  };
+  state.caught=0;state.li=idx;state.tLeft=cfg.secs;state.screen='playing';
+  show(null);updateHud();killTmr();
+  tmr=setInterval(()=>{
+    if(state.screen!=='playing'&&state.screen!=='caught')return;
+    state.tLeft=Math.max(0,state.tLeft-1);
+    updateHud();
+    if(state.tLeft<=0){
+      killTmr();
+      const c=LEVELS[state.li];
+      if(state.caught>=c.quota){
+        advanceOrWin();
+      } else {
+        state.screen='over';showOver();
+        document.getElementById('hud').classList.add('hidden');
+      }
+    }
+  },1000);
+}
+
+function advanceOrWin(){
+  if(state.li<LEVELS.length-1){
+    sfx.up();state.screen='lvlup';
+    document.getElementById('lvlup-n').textContent='LEVEL '+(state.li+2);
+    document.getElementById('lvlup-name').textContent=LEVELS[state.li+1].name;
+    document.getElementById('lvlup-sub').textContent=`${LEVELS[state.li+1].sigs} SIGNAL${LEVELS[state.li+1].sigs>1?'S':''} \u00B7 ${LEVELS[state.li+1].secs}S`;
+    show('scr-lvlup');
+    setTimeout(()=>startLevel(state.li+1),2600);
+  } else {
+    sfx.up();state.screen='win';
+    document.getElementById('win-score').textContent='SCORE '+state.score;
+    buildWinCol();show('scr-win');
+  }
+}
+
+function showOver(){
+  document.getElementById('over-score').textContent='SCORE '+state.score;
+  const n=state.collection.length;
+  document.getElementById('over-msg').textContent=n>0?`${n} idea${n!==1?'s':''} caught before the static won.`:'The signal was there. It always is.';
+  const vb=document.getElementById('btn-viewcol');
+  if(n>0)vb.classList.remove('hidden');else vb.classList.add('hidden');
+  show('scr-over');
+}
+
+function buildWinCol(){
+  const el=document.getElementById('win-col');el.innerHTML='';
+  state.collection.forEach(a=>{
+    const wrap=document.createElement('div');
+    wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px';
+    wrap.appendChild(buildPixelArt(a.id,a.col,a.acc,10));
+    const lbl=document.createElement('div');
+    lbl.className='vt';lbl.style.cssText=`color:${a.col};font-size:11px;letter-spacing:1px`;
+    lbl.textContent=a.id;wrap.appendChild(lbl);
+    el.appendChild(wrap);
+  });
+}
+
+function buildColGrid(){
+  const el=document.getElementById('col-grid');el.innerHTML='';
+  state.collection.forEach(a=>{
+    const card=document.createElement('div');
+    card.style.cssText='display:flex;flex-direction:column;align-items:center;gap:8px;background:#161616;padding:12px;border:1px solid #222';
+    card.appendChild(buildPixelArt(a.id,a.col,a.acc,18));
+    const nm=document.createElement('div');nm.className='vt';nm.style.cssText=`color:${a.col};font-size:15px;letter-spacing:2px`;nm.textContent=a.id;
+    const qt=document.createElement('div');qt.className='mono';qt.style.cssText='color:#333;font-size:10px;max-width:120px;text-align:center;line-height:1.8';qt.textContent=`"${a.q}"`;
+    const pt=document.createElement('div');pt.className='vt';pt.style.cssText='color:#2a2a2a;font-size:13px';pt.textContent='+'+a.pts;
+    card.appendChild(nm);card.appendChild(qt);card.appendChild(pt);
+    el.appendChild(card);
+  });
+}
+
+function handleTap(cx,cy){
+  if(state.screen!=='playing')return;
+  const e=eng;
+  let hit=false;
+  for(const s of e.sigs){
+    const dx=cx-s.cx,dy=cy-s.cy,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<s.r*1.6){
+      hit=true;
+      if(s.catchable){
+        sfx.catch();
+        e.parts.push(...makeParts(s.cx,s.cy,s.col));
+        const art=ARTIFACTS[~~(Math.random()*ARTIFACTS.length)];
+        const pts=~~(80+(state.tLeft/LEVELS[state.li].secs)*120);
+        state.collection.push({...art,pts});
+        state.score+=pts;
+        s.pulseT=0;s.catchable=false;s.phase=0;
+        s.cx=rnd(90,window.innerWidth-90);s.cy=rnd(90,window.innerHeight-90);
+        state.caught++;
+        const cfg=LEVELS[state.li];
+        showCatch(art,pts,()=>{
+          if(state.caught>=cfg.quota){killTmr();advanceOrWin();}
+          else{if(state.screen==='caught'){state.screen='playing';show(null);updateHud();}}
+        });
+      } else {
+        sfx.miss();
+        const orig=s.col;s.flashCol='#ff2222';
+        setTimeout(()=>{s.flashCol=null;},450);
+        state.lives=Math.max(0,state.lives-1);
+        updateHud();
+        if(state.lives<=0){killTmr();state.screen='over';showOver();document.getElementById('hud').classList.add('hidden');}
+      }
+      return;
+    }
+  }
+  if(!hit){
+    e.parts.push(...makeParts(cx,cy,'#ffffff',10).map(p=>({...p,vx:rnd(-4,4),vy:rnd(-4,4),sz:rnd(1,3),decay:p.decay*5})));
+  }
+}
+
+function showCatch(art,pts,cb){
+  state.screen='caught';
+  const artEl=document.getElementById('catch-art');artEl.innerHTML='';
+  artEl.appendChild(buildPixelArt(art.id,art.col,art.acc,30));
+  const nm=document.getElementById('catch-name');
+  nm.textContent=art.id;nm.style.color=art.col;
+  nm.style.textShadow=`0 0 30px ${art.col},0 0 60px ${art.col}44`;
+  document.getElementById('catch-quote').textContent=`"${art.q}"`;
+  const ptEl=document.getElementById('catch-pts');
+  ptEl.textContent=`+${pts}`;ptEl.style.color=art.col;
+  show('scr-caught');
+  document.getElementById('hud').classList.remove('hidden');
+  updateHud();
+  setTimeout(()=>{if(state.screen==='caught')cb();},2200);
+}
+
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  CVS.width=window.innerWidth*dpr;CVS.height=window.innerHeight*dpr;
+}
+resize();window.addEventListener('resize',()=>{resize();});
+
+let prev=performance.now();
+function loop(now){
+  raf=requestAnimationFrame(loop);
+  const dt=Math.min((now-prev)/1000,0.05);prev=now;
+  eng.t+=dt;
+  const W=window.innerWidth,H=window.innerHeight;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const cfg=LEVELS[state.li]||LEVELS[0];
+  const scr=state.screen;
+  if(scr==='playing'||scr==='caught'){
+    for(const s of eng.sigs){
+      s.cx+=s.vx;s.cy+=s.vy;
+      if(s.cx<80||s.cx>W-80)s.vx*=-1;
+      if(s.cy<80||s.cy>H-80)s.vy*=-1;
+      s.cx=clamp(s.cx,80,W-80);s.cy=clamp(s.cy,80,H-80);
+      s.vx+=rnd(-0.022,0.022);s.vy+=rnd(-0.022,0.022);
+      s.vx=clamp(s.vx,-0.6,0.6);s.vy=clamp(s.vy,-0.6,0.6);
+      s.pulseT+=dt*1000;if(s.pulseT>cfg.period)s.pulseT=0;
+      const prev_c=s.catchable;
+      const p=s.pulseT/cfg.period;
+      const ramp=0.3,hold=cfg.catchFrac,down=0.25;
+      if(p<ramp){s.phase=p/ramp;s.catchable=false;}
+      else if(p<ramp+hold){s.phase=1;s.catchable=true;}
+      else if(p<ramp+hold+down){s.phase=1-(p-ramp-hold)/down;s.catchable=false;}
+      else{s.phase=0;s.catchable=false;}
+      if(!prev_c&&s.catchable)sfx.ping();
+    }
+  }
+  eng.parts=eng.parts.filter(p=>p.life>0.01);
+  for(const p of eng.parts){p.x+=p.vx;p.y+=p.vy;p.vy+=0.3;p.vx*=0.97;p.life-=p.decay;}
+  CTX.setTransform(dpr,0,0,dpr,0,0);
+  drawScene(W,H,eng.t,eng.sigs,eng.parts);
+}
+raf=requestAnimationFrame(loop);
+
+CVS.addEventListener('touchstart',e=>{e.preventDefault();handleTap(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+CVS.addEventListener('click',e=>handleTap(e.clientX,e.clientY));
+
+function resetGame(){state.score=0;state.lives=3;state.collection=[];state.caught=0;}
+document.getElementById('btn-start').addEventListener('click',()=>{resetGame();startLevel(0);});
+document.getElementById('btn-retry').addEventListener('click',()=>{resetGame();startLevel(0);});
+document.getElementById('btn-winretry').addEventListener('click',()=>{resetGame();startLevel(0);});
+document.getElementById('btn-viewcol').addEventListener('click',()=>{buildColGrid();show('scr-collection');});
+document.getElementById('btn-colback').addEventListener('click',()=>showOver());
+})();
+</script>
+</body>
+</html>
